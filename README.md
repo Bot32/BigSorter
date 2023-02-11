@@ -7,7 +7,7 @@ Both apps support help command (-h).
 
 ## BigSorter.Generator
 Pretty straightforward. You can specify file name with -f param and target size in gigabytes with -g param.
-I didn't enforce duplicate string as they happen naturally.
+I didn't enforce duplicate strings as they happen naturally.
 
 ## BigSorter.Generator
 I used external merge sort. You can specify file name with -f param and max parallel degree with -p param.
