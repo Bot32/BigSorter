@@ -12,18 +12,16 @@ namespace BigSorter.Sorter
         /// </summary>
         /// <param name="f">File name</param>
         /// <param name="p">Max degree of parallelism</param>
-        static void Main(string f = "file1GB.txt", int p = 8)
+        static void Main(string f = "file.txt", int p = 8)
         {
             _po = new() { MaxDegreeOfParallelism = p };
             var watch = Stopwatch.StartNew();
-            var mergeFactor = 4;
+            var mergeFactor = 5;
             var file = new FileInfo(f);
 
-            Console.Clear();
-            Console.WriteLine($"File: {f}. Size: {file.Length / 1024} mb.");
+            Console.WriteLine($"File: {f}. Size: {file.Length / (1024 * 1024 * 1024)} GB.");
             Console.WriteLine($"Max degree of parallelism: {p}.");
             Console.WriteLine();
-
 
             (var partSize, var partNumber) = GetPartInfo(file.Length, p);
 
@@ -33,7 +31,7 @@ namespace BigSorter.Sorter
 
             var files = SplitFile(file, partSize);
 
-            Console.WriteLine($"Total time to split all parts: {GetMinutes(splitWatch.ElapsedMilliseconds)} minutes.");
+            Console.WriteLine($"Total time to split: {GetMinutes(splitWatch.ElapsedMilliseconds)} minutes.");
             Console.WriteLine();
 
             //Sort
@@ -57,8 +55,6 @@ namespace BigSorter.Sorter
             CleanUp();
 
             Console.WriteLine($"Total elapsed time from start: {GetMinutes(watch.ElapsedMilliseconds)} minutes.");
-            Console.WriteLine("Press any key to continue...");
-            Console.ReadLine();
         }
 
         static double GetMinutes(long ms)
@@ -68,14 +64,14 @@ namespace BigSorter.Sorter
 
         static (long partSize, int parstNumber) GetPartInfo(long fileSize, int maxDegreeOfParallelism)
         {
-            var stringsInRamFactor = 3.5;
-            var mb = 1048576;
-            var reserveram = 1024 * mb;
+            var stringsInRamFactor = 4;
+            var mb = 1024 * 1024;
+            var reserveRam = 1024 * mb;
             var splitOffset = 10240;
 
-            var memory = new PerformanceCounter("Memory", "Available MBytes").NextValue() * mb;
-            var available = (long)((memory - reserveram) / stringsInRamFactor);
-            var maxPartSize = available / maxDegreeOfParallelism;
+            var availableRam = new PerformanceCounter("Memory", "Available MBytes").NextValue() * mb;
+            var maxAllocatableRam = (long)((availableRam - reserveRam) / stringsInRamFactor);
+            var maxPartSize = maxAllocatableRam / maxDegreeOfParallelism;
 
             var partSize = fileSize / maxDegreeOfParallelism;
             var multiplier = 1;
