@@ -12,18 +12,19 @@ namespace BigSorter.Sorter
         /// </summary>
         /// <param name="f">File name</param>
         /// <param name="p">Max degree of parallelism</param>
-        static void Main(string f = "file.txt", int p = 8)
+        static void Main(string f = "file.txt", int? p = null)
         {
-            _po = new() { MaxDegreeOfParallelism = p };
+            var maxThreads = p ?? Environment.ProcessorCount - 1;
+            _po = new() { MaxDegreeOfParallelism = maxThreads };
             var watch = Stopwatch.StartNew();
             var mergeFactor = 5;
             var file = new FileInfo(f);
 
             Console.WriteLine($"File: {f}. Size: {file.Length / (1024 * 1024 * 1024)} GB.");
-            Console.WriteLine($"Max degree of parallelism: {p}.");
+            Console.WriteLine($"Max degree of parallelism: {maxThreads}.");
             Console.WriteLine();
 
-            (var partSize, var partNumber) = GetPartInfo(file.Length, p);
+            (var partSize, var partNumber) = GetPartInfo(file.Length, maxThreads);
 
             //Split
             var splitWatch = Stopwatch.StartNew();
@@ -91,7 +92,8 @@ namespace BigSorter.Sorter
             StreamWriter currentFile = null;
 
             var reader = file.OpenText();
-            while (reader.Peek() != -1)
+            string? line;
+            while ((line = reader.ReadLine()) != null)
             {
                 if (currentPart == 0 || reader.BaseStream.Position / (partSize * currentPart) > 0)
                 {
@@ -102,7 +104,6 @@ namespace BigSorter.Sorter
                     currentFile = new StreamWriter(path);
                 }
 
-                var line = reader.ReadLine();
                 var i = line.IndexOf('.', StringComparison.Ordinal);
                 currentFile?.WriteLine($"{line[(i + 2)..]}.{line[..i]}");
             }
@@ -165,8 +166,8 @@ namespace BigSorter.Sorter
             var mergeDir = Path.Combine(Directory.GetCurrentDirectory(), "parts\\merge");
             Directory.CreateDirectory(mergeDir);
             var mergedFile = Path.Combine(mergeDir, $"merged_{Guid.NewGuid()}.txt");
+            
             var queue = new PriorityQueue<Row, string>(files.Length, StringComparer.Ordinal);
-
             var readers = new StreamReader[files.Length];
             var writer = new StreamWriter(mergedFile);
 
