@@ -1,58 +1,59 @@
-﻿using System.Collections.Concurrent;
+﻿using BigSorter.RSorter;
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
 
 namespace BigSorter.Sorter
 {
     internal class Program
     {
-        static ParallelOptions _po;
-        static IComparer<string> _stringComparer;
+        static ParallelOptions _po = new ParallelOptions();
+        static readonly IComparer<string> _stringComparer = new StringFlipComparer(StringComparison.Ordinal);
 
         /// <summary>
         /// Sorting App
         /// </summary>
         /// <param name="f">File name</param>
         /// <param name="p">Max degree of parallelism</param>
-        static void Main(string f = "file.txt", int? p = null)
+        static void Main(string f = "file1GB.txt", int? p = null)
         {
-            _stringComparer = new StringFlipComparer(StringComparison.Ordinal);
             var maxThreads = p ?? Environment.ProcessorCount - 1;
-            _po = new() { MaxDegreeOfParallelism = maxThreads };
+            _po.MaxDegreeOfParallelism = maxThreads;
             var watch = Stopwatch.StartNew();
-            var mergeFactor = 4;
+            var mergeFactor = 6;
             var file = new FileInfo(f);
 
             Console.WriteLine($"File: {f}. Size: {file.Length / (1024 * 1024 * 1024)} GB.");
             Console.WriteLine($"Max degree of parallelism: {maxThreads}.");
             Console.WriteLine();
 
-            (var partSize, var partNumber) = GetPartInfo(file.Length, maxThreads);
+            (var chunkSize, var chunksNumber) = GetChunksInfo(file.Length, maxThreads);
 
-            //Split
-            var splitWatch = Stopwatch.StartNew();
-            Console.WriteLine($"Splitting {file} into {partNumber} parts.");
+            //Scan
+            var scanWatch = Stopwatch.StartNew();
+            Console.WriteLine($"Scanning {file}.");
 
-            var files = SplitFile(file, partSize);
+            var chunkSeparators = ScanFile(file, chunkSize);
 
-            Console.WriteLine($"Total time to split: {GetMinutes(splitWatch.ElapsedMilliseconds)} minutes.");
+            Console.WriteLine($"Total time to scan: {GetMinutes(scanWatch.ElapsedMilliseconds)} minutes.");
             Console.WriteLine();
 
-            //Sort
+            //Sort 
             var sortWatch = Stopwatch.StartNew();
-            Console.WriteLine("Sorting file parts...");
+            Console.WriteLine("Sorting file chunks...");
 
-            Sort(files);
+            var sortedFiles = Sort(file, chunkSeparators, chunkSize);
 
-            Console.WriteLine($"Total time to sort all parts: {GetMinutes(sortWatch.ElapsedMilliseconds)} minutes.");
+            Console.WriteLine($"Total time to sort all chunks: {GetMinutes(sortWatch.ElapsedMilliseconds)} minutes.");
             Console.WriteLine();
 
             //Merge
             var mergeWatch = Stopwatch.StartNew();
             Console.WriteLine($"Merging files...");
 
-            MergeFilesParallel(files, mergeFactor);
+            MergeFilesParallel(sortedFiles, mergeFactor);
 
-            Console.WriteLine($"Total time to merge all parts: {GetMinutes(mergeWatch.ElapsedMilliseconds)} minutes.");
+            Console.WriteLine($"Total time to merge all chunks: {GetMinutes(mergeWatch.ElapsedMilliseconds)} minutes.");
             Console.WriteLine();
 
             CleanUp();
@@ -67,7 +68,7 @@ namespace BigSorter.Sorter
             return Math.Round((double)ms / 60000, 2);
         }
 
-        static (long partSize, int parstNumber) GetPartInfo(long fileSize, int maxDegreeOfParallelism)
+        static (long chunkSize, int parstNumber) GetChunksInfo(long fileSize, int maxDegreeOfParallelism)
         {
             var stringsInRamFactor = 4;
             var mb = 1024 * 1024;
@@ -76,55 +77,89 @@ namespace BigSorter.Sorter
 
             var availableRam = new PerformanceCounter("Memory", "Available MBytes").NextValue() * mb;
             var maxAllocatableRam = (long)((availableRam - reserveRam) / stringsInRamFactor);
-            var maxPartSize = maxAllocatableRam / maxDegreeOfParallelism;
+            var maxChunkSize = maxAllocatableRam / maxDegreeOfParallelism;
 
-            var partSize = fileSize / maxDegreeOfParallelism;
+            var chunkSize = fileSize / maxDegreeOfParallelism;
             var multiplier = 1;
-            while (partSize > maxPartSize)
-                partSize = fileSize / (maxDegreeOfParallelism * ++multiplier);
+            while (chunkSize > maxChunkSize)
+                chunkSize = fileSize / (maxDegreeOfParallelism * ++multiplier);
 
-            return (partSize + splitOffset, maxDegreeOfParallelism * multiplier);
+            return (chunkSize + splitOffset, maxDegreeOfParallelism * multiplier);
         }
 
-        static string[] SplitFile(FileInfo file, long partSize)
+        record FromTo
         {
-            var partsDir = Path.Combine(file.DirectoryName, "parts");
-            Directory.CreateDirectory(partsDir);
+            public FromTo(string from, string to)
+            {
+                From = from;
+                To = to;
+            }
+            public string From { get; set; }
+            public string To { get; set; }
+        };
 
-            var files = new List<string>();
-            var currentPart = 0;
-            StreamWriter currentFile = null;
+        static Dictionary<long, string> ScanFile(FileInfo file, long chunkSize)
+        {
+            var chunksSeparators = new Dictionary<long, string>();
+            var checkPoint = chunkSize;
+            using var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var reader = new StreamReader(stream, Encoding.UTF8); ;
 
-            var reader = file.OpenText();
-            string? line;
+            var separator = 0L;
+            var previousSeparator = 0L;
+            var line = reader.ReadLine();
+
+            reader.BaseStream.Position = checkPoint;
+            reader.DiscardBufferedData();
+
             while ((line = reader.ReadLine()) != null)
             {
-                if (currentPart == 0 || reader.BaseStream.Position / (partSize * currentPart) > 0)
-                {
-                    currentFile?.Close();
-                    currentPart++;
-                    var path = Path.Combine(partsDir, $"part{currentPart}.txt");
-                    files.Add(path);
-                    currentFile = new StreamWriter(path);
-                }
+                if (string.IsNullOrWhiteSpace(line)) continue;
 
-                currentFile?.WriteLine(line);
+                separator = reader.GetActualPosition();
+                line = reader.ReadLine();
+                chunksSeparators[previousSeparator] = line;
+
+                checkPoint += chunkSize;
+                reader.BaseStream.Seek(checkPoint, SeekOrigin.Begin);
+                reader.DiscardBufferedData();
+
+                previousSeparator = separator;
             }
 
-            currentFile?.Close();
-            reader.Close();
+            chunksSeparators[previousSeparator] = null;
 
-            return files.ToArray();
+            return chunksSeparators;
         }
 
-        static void Sort(string[] files)
+        static string[] Sort(FileInfo file, Dictionary<long, string> separators, long chunkSize)
         {
-            Parallel.ForEach(files, _po, (file) =>
+            var chunksDir = Path.Combine(file.DirectoryName, "chunks");
+            Directory.CreateDirectory(chunksDir);
+            var bag = new ConcurrentBag<string>();
+
+            Parallel.ForEach(separators, _po, (s) =>
             {
-                var all = File.ReadAllLines(file);
-                Array.Sort(all, _stringComparer);
-                File.WriteAllLines(file, all);
+                var end = s.Key + chunkSize;
+                using var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.Read);
+                stream.Position = s.Key;
+                using var reader = new StreamReader(stream, Encoding.UTF8);
+
+                string? line;
+                var lines = new List<string>();
+                while ((line = reader.ReadLine()) != null)
+                {
+                    if (string.Equals(line, s.Value, StringComparison.Ordinal)) break;
+                    lines.Add(line);
+                }
+
+                lines.Sort(_stringComparer);
+                var chunk = Path.Combine(chunksDir, s.Key.ToString() + ".txt");
+                bag.Add(chunk);
+                File.WriteAllLines(chunk, lines);
             });
+
+            return bag.ToArray();
         }
 
         static void MergeFilesParallel(string[] files, int mergeFactor)
@@ -165,7 +200,7 @@ namespace BigSorter.Sorter
         {
             if (files.Length == 1) return files[0];
 
-            var mergeDir = Path.Combine(Directory.GetCurrentDirectory(), "parts\\merge");
+            var mergeDir = Path.Combine(Directory.GetCurrentDirectory(), "chunks\\merge");
             Directory.CreateDirectory(mergeDir);
             var mergedFile = Path.Combine(mergeDir, $"merged_{Guid.NewGuid()}.txt");
 
@@ -209,7 +244,7 @@ namespace BigSorter.Sorter
 
         static void CleanUp()
         {
-            var mergeDir = Path.Combine(Directory.GetCurrentDirectory(), "parts");
+            var mergeDir = Path.Combine(Directory.GetCurrentDirectory(), "chunks");
             Directory.Delete(mergeDir, true);
         }
     }
