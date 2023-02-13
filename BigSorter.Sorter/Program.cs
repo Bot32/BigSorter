@@ -17,10 +17,10 @@ namespace BigSorter.Sorter
         /// <param name="p">Max degree of parallelism</param>
         static void Main(string f = "file1GB.txt", int? p = null)
         {
-            var maxThreads = p ?? Environment.ProcessorCount - 1;
+            var maxThreads = p ?? Environment.ProcessorCount;
             _po.MaxDegreeOfParallelism = maxThreads;
             var watch = Stopwatch.StartNew();
-            var mergeFactor = 6;
+            var mergeFactor = 5;
             var file = new FileInfo(f);
 
             Console.WriteLine($"File: {f}. Size: {file.Length / (1024 * 1024 * 1024)} GB.");
@@ -164,6 +164,9 @@ namespace BigSorter.Sorter
 
         static void MergeFilesParallel(string[] files, int mergeFactor)
         {
+            var mergeDir = Path.Combine(Directory.GetCurrentDirectory(), "chunks\\merge");
+            Directory.CreateDirectory(mergeDir);
+
             var toMerge = files;
             var merged = new ConcurrentBag<string>();
 
@@ -180,7 +183,7 @@ namespace BigSorter.Sorter
                     for (int j = 0; j < batchSize; j++)
                         mergeBatch[j] = toMerge[i * mergeFactor + j];
 
-                    merged.Add(MergeFiles(mergeBatch));
+                    merged.Add(MergeFiles(mergeBatch, mergeDir));
                 });
 
                 toMerge = merged.ToArray();
@@ -196,13 +199,11 @@ namespace BigSorter.Sorter
             public string Value { get; set; }
         }
 
-        static string MergeFiles(string[] files)
+        static string MergeFiles(string[] files, string dir)
         {
             if (files.Length == 1) return files[0];
 
-            var mergeDir = Path.Combine(Directory.GetCurrentDirectory(), "chunks\\merge");
-            Directory.CreateDirectory(mergeDir);
-            var mergedFile = Path.Combine(mergeDir, $"merged_{Guid.NewGuid()}.txt");
+            var mergedFile = Path.Combine(dir, $"merged_{Guid.NewGuid()}.txt");
 
             var queue = new PriorityQueue<Row, string>(files.Length, _stringComparer);
             var readers = new StreamReader[files.Length];

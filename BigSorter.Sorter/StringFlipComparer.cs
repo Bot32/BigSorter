@@ -1,13 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace BigSorter.Sorter
+﻿namespace BigSorter.Sorter
 {
     internal class StringFlipComparer : IComparer<string>
     {
+        private readonly char _dot = '.';
         private readonly StringComparison _baseComparison;
         public StringFlipComparer(StringComparison baseComparison)
         {
@@ -16,17 +11,18 @@ namespace BigSorter.Sorter
 
         public int Compare(string x, string y)
         {
-            var xDot = x.IndexOf('.');
-            var xNum = x.AsSpan(0, xDot);
-            var xStr = x.AsSpan(xDot + 1);
+            var xDot = x.IndexOf(_dot);
+            var xStr = x.AsSpan(xDot);
 
-            var yDot = y.IndexOf('.');
-            var yNum = y.AsSpan(0, yDot);
+            var yDot = y.IndexOf(_dot, 1);
             var yStr = y.AsSpan(yDot + 1);
 
             var strComp = xStr.CompareTo(yStr, _baseComparison);
             if (strComp == 0)
             {
+                var xNum = x.AsSpan(0, xDot);
+                var yNum = y.AsSpan(0, yDot);
+
                 int lengthDiff;
                 if ((lengthDiff = xNum.Length - yNum.Length) != 0)
                     return lengthDiff;
