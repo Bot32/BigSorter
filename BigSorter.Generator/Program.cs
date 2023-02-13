@@ -5,9 +5,10 @@ namespace BigSorter.Generator
     internal class Program
     {
         static readonly string _chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        static readonly string _nums = "1234567890";
         static readonly int _maxSuffixLength = 20;
         static readonly int _minSuffixLength = 5;
-        static readonly int _maxPrefixNumber = 1000000;
+        static readonly int _maxPrefixLength = 10;
         static readonly long _1mb = 1024 * 1024;
         static readonly Random _random = new();
 
@@ -37,12 +38,19 @@ namespace BigSorter.Generator
                     checkpoint += _1mb * 100;
                 }
 
-                builder.Append(_random.Next(_maxPrefixNumber))
-                    .Append(". ");
+                var prefixLength = Math.Max(_random.Next(_maxPrefixLength), 1);
+                for (int i = 0; i < prefixLength; i++)
+                {
+                    var n = _nums[_random.Next(_nums.Length)];
+                    while (i == 0 && n == '0')
+                        n = _nums[_random.Next(_nums.Length)];
+                    builder.Append(n);
+                }
 
-                var suffix = Math.Max(_random.Next(_maxSuffixLength), _minSuffixLength);
+                builder.Append(". ");
 
-                for (int i = 0; i < suffix; i++)
+                var suffixLength = Math.Max(_random.Next(_maxSuffixLength), _minSuffixLength);
+                for (int i = 0; i < suffixLength; i++)
                     builder.Append(_chars[_random.Next(_chars.Length)]);
 
                 writer.WriteLine(builder.ToString());

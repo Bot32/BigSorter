@@ -6,6 +6,7 @@ namespace BigSorter.Sorter
     internal class Program
     {
         static ParallelOptions _po;
+        static IComparer<string> _stringComparer;
 
         /// <summary>
         /// Sorting App
@@ -14,10 +15,11 @@ namespace BigSorter.Sorter
         /// <param name="p">Max degree of parallelism</param>
         static void Main(string f = "file.txt", int? p = null)
         {
+            _stringComparer = new StringFlipComparer(StringComparison.Ordinal);
             var maxThreads = p ?? Environment.ProcessorCount - 1;
             _po = new() { MaxDegreeOfParallelism = maxThreads };
             var watch = Stopwatch.StartNew();
-            var mergeFactor = 5;
+            var mergeFactor = 4;
             var file = new FileInfo(f);
 
             Console.WriteLine($"File: {f}. Size: {file.Length / (1024 * 1024 * 1024)} GB.");
@@ -56,6 +58,8 @@ namespace BigSorter.Sorter
             CleanUp();
 
             Console.WriteLine($"Total elapsed time from start: {GetMinutes(watch.ElapsedMilliseconds)} minutes.");
+            Console.WriteLine($"Press any key to continue...");
+            Console.ReadLine();
         }
 
         static double GetMinutes(long ms)
@@ -104,8 +108,7 @@ namespace BigSorter.Sorter
                     currentFile = new StreamWriter(path);
                 }
 
-                var i = line.IndexOf('.', StringComparison.Ordinal);
-                currentFile?.WriteLine($"{line[(i + 2)..]}.{line[..i]}");
+                currentFile?.WriteLine(line);
             }
 
             currentFile?.Close();
@@ -119,7 +122,7 @@ namespace BigSorter.Sorter
             Parallel.ForEach(files, _po, (file) =>
             {
                 var all = File.ReadAllLines(file);
-                Array.Sort(all, StringComparer.Ordinal);
+                Array.Sort(all, _stringComparer);
                 File.WriteAllLines(file, all);
             });
         }
@@ -131,7 +134,6 @@ namespace BigSorter.Sorter
 
             while (toMerge.Length != 1)
             {
-                var flip = toMerge.Length <= mergeFactor;
                 var loops = (toMerge.Length + mergeFactor - 1) / mergeFactor;
                 Parallel.For(0, loops, _po, (i) =>
                 {
@@ -143,7 +145,7 @@ namespace BigSorter.Sorter
                     for (int j = 0; j < batchSize; j++)
                         mergeBatch[j] = toMerge[i * mergeFactor + j];
 
-                    merged.Add(MergeFiles(mergeBatch, flip));
+                    merged.Add(MergeFiles(mergeBatch));
                 });
 
                 toMerge = merged.ToArray();
@@ -159,15 +161,15 @@ namespace BigSorter.Sorter
             public string Value { get; set; }
         }
 
-        static string MergeFiles(string[] files, bool flip)
+        static string MergeFiles(string[] files)
         {
             if (files.Length == 1) return files[0];
 
             var mergeDir = Path.Combine(Directory.GetCurrentDirectory(), "parts\\merge");
             Directory.CreateDirectory(mergeDir);
             var mergedFile = Path.Combine(mergeDir, $"merged_{Guid.NewGuid()}.txt");
-            
-            var queue = new PriorityQueue<Row, string>(files.Length, StringComparer.Ordinal);
+
+            var queue = new PriorityQueue<Row, string>(files.Length, _stringComparer);
             var readers = new StreamReader[files.Length];
             var writer = new StreamWriter(mergedFile);
 
@@ -187,19 +189,11 @@ namespace BigSorter.Sorter
             while (queue.Count > 0)
             {
                 var row = queue.Dequeue();
-                var value = row.Value;
+                writer.WriteLine(row.Value);
 
-                if (flip)
-                {
-                    var i = row.Value.LastIndexOf(".", StringComparison.Ordinal);
-                    value = $"{row.Value[(i + 1)..]}. {row.Value[..i]}";
-                }
-
-                writer.WriteLine(value);
-
-                if (readers[row.File].Peek() < 0) continue;
                 row.Value = readers[row.File].ReadLine();
-                queue.Enqueue(row, row.Value);
+                if (row.Value != null)
+                    queue.Enqueue(row, row.Value);
             }
 
             writer.Close();
