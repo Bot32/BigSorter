@@ -12,9 +12,9 @@
         public int Compare(string x, string y)
         {
             var xDot = x.IndexOf(_dot);
-            var xStr = x.AsSpan(xDot);
+            var xStr = x.AsSpan(xDot + 1);
 
-            var yDot = y.IndexOf(_dot, 1);
+            var yDot = y.IndexOf(_dot);
             var yStr = y.AsSpan(yDot + 1);
 
             var strComp = xStr.CompareTo(yStr, _baseComparison);

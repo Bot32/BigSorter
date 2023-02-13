@@ -17,7 +17,7 @@ namespace BigSorter.Sorter
         /// <param name="p">Max degree of parallelism</param>
         static void Main(string f = "file1GB.txt", int? p = null)
         {
-            var maxThreads = p ?? Environment.ProcessorCount;
+            var maxThreads = p ?? Environment.ProcessorCount - 1;
             _po.MaxDegreeOfParallelism = maxThreads;
             var watch = Stopwatch.StartNew();
             var mergeFactor = 5;
@@ -42,7 +42,7 @@ namespace BigSorter.Sorter
             var sortWatch = Stopwatch.StartNew();
             Console.WriteLine("Sorting file chunks...");
 
-            var sortedFiles = Sort(file, chunkSeparators, chunkSize);
+            var sortedFiles = Sort(file, chunkSeparators);
 
             Console.WriteLine($"Total time to sort all chunks: {GetMinutes(sortWatch.ElapsedMilliseconds)} minutes.");
             Console.WriteLine();
@@ -87,17 +87,6 @@ namespace BigSorter.Sorter
             return (chunkSize + splitOffset, maxDegreeOfParallelism * multiplier);
         }
 
-        record FromTo
-        {
-            public FromTo(string from, string to)
-            {
-                From = from;
-                To = to;
-            }
-            public string From { get; set; }
-            public string To { get; set; }
-        };
-
         static Dictionary<long, string> ScanFile(FileInfo file, long chunkSize)
         {
             var chunksSeparators = new Dictionary<long, string>();
@@ -132,7 +121,7 @@ namespace BigSorter.Sorter
             return chunksSeparators;
         }
 
-        static string[] Sort(FileInfo file, Dictionary<long, string> separators, long chunkSize)
+        static string[] Sort(FileInfo file, Dictionary<long, string> separators)
         {
             var chunksDir = Path.Combine(file.DirectoryName, "chunks");
             Directory.CreateDirectory(chunksDir);
@@ -140,7 +129,6 @@ namespace BigSorter.Sorter
 
             Parallel.ForEach(separators, _po, (s) =>
             {
-                var end = s.Key + chunkSize;
                 using var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.Read);
                 stream.Position = s.Key;
                 using var reader = new StreamReader(stream, Encoding.UTF8);
