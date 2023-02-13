@@ -18,6 +18,6 @@ My PC specs:
 Core(TM) i7-12700H 2.70 GHz, 16,0 GB RAM, 1 TB SSD.
 
 My sorting results:
-1GB ~ 30 sec.
-10GB ~ 6 min 30 sec.
-100GB(~1 billion strings) ~ 1h 16 min.
+1GB ~ 38 sec.
+10GB ~ 8 min 20 sec.
+100GB(~1 billion strings) ~ 1h 35 min.
