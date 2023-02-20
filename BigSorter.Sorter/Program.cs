@@ -15,7 +15,8 @@ namespace BigSorter.Sorter
         /// </summary>
         /// <param name="f">File name</param>
         /// <param name="p">Max degree of parallelism</param>
-        static void Main(string f = "file1GB.txt", int? p = null)
+        /// <param name="g">Target RAM to allocate in Gigabytes</param>
+        static void Main(string f = "file.txt", int? g = null,  int? p = null)
         {
             var maxThreads = p ?? Environment.ProcessorCount - 1;
             _po.MaxDegreeOfParallelism = maxThreads;
@@ -27,7 +28,7 @@ namespace BigSorter.Sorter
             Console.WriteLine($"Max degree of parallelism: {maxThreads}.");
             Console.WriteLine();
 
-            (var chunkSize, var chunksNumber) = GetChunksInfo(file.Length, maxThreads);
+            (var chunkSize, var chunksNumber) = GetChunksInfo(file.Length, maxThreads, g);
 
             //Scan
             var scanWatch = Stopwatch.StartNew();
@@ -68,16 +69,21 @@ namespace BigSorter.Sorter
             return Math.Round((double)ms / 60000, 2);
         }
 
-        static (long chunkSize, int parstNumber) GetChunksInfo(long fileSize, int maxDegreeOfParallelism)
+        static (long chunkSize, int parstNumber) GetChunksInfo(long fileSize, int maxDegreeOfParallelism, int? targetRam)
         {
             var stringsInRamFactor = 4;
-            var mb = 1024 * 1024;
-            var reserveRam = 1024 * mb;
             var splitOffset = 10240;
 
-            var availableRam = new PerformanceCounter("Memory", "Available MBytes").NextValue() * mb;
-            var maxAllocatableRam = (long)((availableRam - reserveRam) / stringsInRamFactor);
-            var maxChunkSize = maxAllocatableRam / maxDegreeOfParallelism;
+            long maxChunkSize;
+            if(targetRam == null)
+            {
+                var availableRam = new PerformanceCounter("Memory", "Available MBytes").NextValue() * 1024 * 1024;
+                var maxAllocatableRam = (long)((availableRam - 1024 * 1024 * 1024) / stringsInRamFactor);
+                maxChunkSize = maxAllocatableRam / maxDegreeOfParallelism;
+            } else
+            {
+                maxChunkSize = ((targetRam.Value * 1024 * 1024 * 1024) / stringsInRamFactor) / maxDegreeOfParallelism;
+            }
 
             var chunkSize = fileSize / maxDegreeOfParallelism;
             var multiplier = 1;
