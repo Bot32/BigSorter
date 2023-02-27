@@ -40,7 +40,7 @@ namespace BigSorter.Sorter
             (var chunkSize, var chunksNumber) = GetChunksInfo(file.Length, _maxThreads, _maxRamGB);
             var chunkSeparators = ScanFile(file, chunkSize);
 
-            Console.WriteLine($"Estimated chunks: {chunksNumber}. Chunk size: {chunkSize}.");
+            Console.WriteLine($"Chunks: {chunksNumber}. Chunk size: {chunkSize}.");
             Console.WriteLine($"Total time to scan: {GetMinutes(scanWatch.ElapsedMilliseconds)} minutes.");
             Console.WriteLine();
 
@@ -101,26 +101,24 @@ namespace BigSorter.Sorter
             var chunksSeparators = new Dictionary<long, string>();
             var checkPoint = chunkSize;
             using var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.Read);
-            using var reader = new StreamReader(stream, Encoding.UTF8); ;
+            using var reader = new BinaryReader(stream, Encoding.UTF8);
 
             var separator = 0L;
             var previousSeparator = 0L;
-            var line = reader.ReadLine();
 
             reader.BaseStream.Position = checkPoint;
-            reader.DiscardBufferedData();
 
+            string? line;
             while ((line = reader.ReadLine()) != null)
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
-                separator = reader.GetActualPosition();
+                separator = reader.BaseStream.Position;
                 line = reader.ReadLine();
                 chunksSeparators[previousSeparator] = line;
 
                 checkPoint += chunkSize;
                 reader.BaseStream.Seek(checkPoint, SeekOrigin.Begin);
-                reader.DiscardBufferedData();
 
                 previousSeparator = separator;
             }

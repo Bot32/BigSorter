@@ -9,7 +9,7 @@
         /// <param name="r">Result file</param>
         /// <param name="p">Max degree of parallelism</param>
         /// <param name="g">Max to allocate in Gigabytes</param>
-        static void Main(string f = "file1GB.txt", string? r = null, int? g = 4, int? p = null)
+        static void Main(string f = "file.txt", string? r = null, int? g = 5, int? p = null)
         {
             using var sorter = new Sorter(g, p);
             sorter.Run(f, r);
