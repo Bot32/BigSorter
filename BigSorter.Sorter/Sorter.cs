@@ -9,12 +9,12 @@ namespace BigSorter.Sorter
     {
         readonly ParallelOptions _po;
         readonly IComparer<string> _stringComparer = new StringFlipComparer(StringComparison.Ordinal);
-        readonly int? _maxRamGB;
+        readonly int _maxRamGB;
         readonly int _maxThreads;
         readonly int _mergeFactor = 5;
         readonly string _tempDir;
 
-        public Sorter(int? maxRamGB, int? maxDegreeOfParallelism)
+        public Sorter(int maxRamGB, int? maxDegreeOfParallelism)
         {
             _maxRamGB = maxRamGB;
             _maxThreads = maxDegreeOfParallelism ?? Environment.ProcessorCount - 1;
@@ -77,7 +77,7 @@ namespace BigSorter.Sorter
             var splitOffset = 10240;
 
             long maxChunkSize;
-            if (maxRamGB == null)
+            if (maxRamGB == 0)
             {
                 var availableRam = new PerformanceCounter("Memory", "Available MBytes").NextValue() * 1024 * 1024;
                 var maxAllocatableRam = (long)((availableRam - 1024 * 1024 * 1024) / stringsInRamFactor);
