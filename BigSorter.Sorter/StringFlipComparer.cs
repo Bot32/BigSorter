@@ -9,8 +9,16 @@
             _baseComparison = baseComparison;
         }
 
-        public int Compare(string x, string y)
+        public int Compare(string? x, string? y)
         {
+            if (x == null || y == null)
+            {
+                if (ReferenceEquals(x, y)) // They're both null
+                    return 0;
+
+                return x == null ? -1 : 1;
+            }
+
             var xDot = x.IndexOf(_dot);
             var xStr = x.AsSpan(xDot + 1);
 
